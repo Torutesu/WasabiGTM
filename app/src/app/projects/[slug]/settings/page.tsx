@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { describeLlm } from "@/lib/llm";
 import { SettingsView } from "./settings-view";
 
 /** SCR-012 */
@@ -13,9 +14,13 @@ export default async function SettingsPage({ params }: PageProps<"/projects/[slu
     orderBy: { channel: "asc" },
   });
 
+  // Keys live in the environment, never in the database, so this is read-only.
+  const llm = describeLlm();
+
   return (
     <SettingsView
       slug={slug}
+      llm={llm}
       project={{
         name: project.name,
         url: project.url,

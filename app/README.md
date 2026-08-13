@@ -28,17 +28,55 @@ npm run db:seed
 npm run test:db:migrate
 ```
 
-Copy `.env` and set real values before doing anything beyond local work — in
-particular `AUTH_SECRET` and `ANTHROPIC_API_KEY`.
+Copy `.env.example` to `.env` and set real values before doing anything beyond
+local work — in particular `AUTH_SECRET` and at least one LLM key.
 
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
 | `AUTH_SECRET` | Session signing key. **Replace the development value.** |
-| `ANTHROPIC_API_KEY` | Enables the real model. Without it the app runs the deterministic offline provider. |
-| `WASABI_LLM_PROVIDER` | `auto` (default), `anthropic`, or `offline` |
+| `WASABI_LLM_PROVIDER` | `auto` (default), `anthropic`, `openai`, `gemini`, `opencode`, `offline` |
 | `WASABI_MOCK_EXTERNAL` | `1` mocks every outbound integration. **Never set this in production.** |
-| `MODEL_HIGH` / `MODEL_MID` / `MODEL_LIGHT` | Model per tier (see `src/lib/llm.ts`) |
+
+## LLM providers
+
+Four vendors are supported. Set the key for whichever you use:
+
+| Provider | Key | Endpoint | Structured output |
+|---|---|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` | default | `output_config.format` (strict) |
+| OpenAI | `OPENAI_API_KEY` | default | `response_format: json_schema` (strict) |
+| Gemini | `GEMINI_API_KEY` | default | `responseSchema` (schema is translated — see below) |
+| OpenCode Zen | `OPENCODE_API_KEY` | `https://opencode.ai/zen/v1` | loose JSON mode, auto-upgrades to strict if the endpoint accepts it |
+
+With `WASABI_LLM_PROVIDER=auto` the first vendor in that order that has a key is
+selected. **With no key at all, `auto` falls back to the deterministic offline
+provider** — the app still works, but nothing is written by a real model. The
+Settings screen shows which provider is live and warns when it is the fallback.
+
+Each provider has its own per-tier defaults. Override per tier, most specific
+first: `OPENAI_MODEL_HIGH` → `MODEL_HIGH` → built-in default. Endpoints can be
+redirected with `OPENAI_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENCODE_BASE_URL`
+(proxies, gateways, Azure). See `.env.example` for the full list.
+
+Verify a key end to end — this is the only thing that exercises the real
+structured-output path, since the E2E suite runs on offline fixtures:
+
+```bash
+npx tsx scripts/check-provider.ts            # the active provider
+npx tsx scripts/check-provider.ts gemini     # a specific one
+```
+
+Two provider-specific notes:
+
+- **Gemini** accepts a restricted schema dialect. `toGeminiSchema` drops
+  `additionalProperties` and rewrites `type: ["integer", "null"]` to
+  `nullable: true`, because Gemini rejects both. Unit-tested.
+- **OpenCode Zen** fronts a mixed catalogue (Claude, GPT, Gemini, DeepSeek, …)
+  behind one key, so not every model implements strict schemas. It defaults to
+  loose JSON mode with the schema restated in the prompt, and upgrades itself
+  once an endpoint proves it accepts `json_schema`. Force either mode with
+  `OPENCODE_SCHEMA_MODE`.
 
 ## Running
 
@@ -53,19 +91,16 @@ Sign in with the seeded user (`SEED_USER_EMAIL` / `SEED_USER_PASSWORD`).
 ## Tests
 
 ```bash
+npm run test:unit       # pure logic: provider selection, schema translation, JSON extraction
 npm run test:db:reset   # truncate + reseed the *_test database
 npm run test:e2e        # Playwright, P0 suite
+npm test                # typecheck + lint + unit + e2e
 ```
 
-The suite runs against a production build and mocks every external service, so
-it exercises application logic rather than network availability or model output.
-
-## Checks
-
-```bash
-npm run typecheck
-npm run lint
-```
+The E2E suite runs against a production build and mocks every external service,
+so it exercises application logic rather than network availability or model
+output. It forces `WASABI_LLM_PROVIDER=offline`, so a real key on the machine
+never changes a test result.
 
 ## Layout
 
@@ -73,8 +108,14 @@ npm run lint
 src/
   brand.config.ts      Design tokens. Swap this file to reskin every screen.
   lib/
-    llm.ts             Model tiers; Anthropic and offline providers
-    llm-offline.ts     Deterministic fixtures used by the E2E suite
+    llm/
+      index.ts         Provider registry, key resolution, selection
+      anthropic.ts     Anthropic
+      openai-compatible.ts  OpenAI and OpenCode Zen
+      gemini.ts        Gemini + its schema dialect converter
+      offline.ts       Deterministic provider
+      offline-fixtures.ts   Fixtures used by the E2E suite
+      models.ts        Per-provider tier defaults and overrides
     context.ts         Living Context ingest + foundation documents (AIF-001/002)
     agents.ts          Channel agents (AIF-003..007)
     quality.ts         The anti-slop gate (AIF-008)

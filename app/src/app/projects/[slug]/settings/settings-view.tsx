@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Button, Card, ErrorBanner, Toast } from "@/components/ui";
+import { Badge, Button, Card, ErrorBanner, Toast } from "@/components/ui";
+import type { LlmStatus } from "@/lib/llm";
 
 type Agent = {
   channel: string;
@@ -25,10 +26,12 @@ export function SettingsView({
   slug,
   project,
   agents: initialAgents,
+  llm,
 }: {
   slug: string;
   project: Project;
   agents: Agent[];
+  llm: LlmStatus;
 }) {
   const router = useRouter();
   const [agents, setAgents] = useState(initialAgents);
@@ -112,6 +115,53 @@ export function SettingsView({
   return (
     <div className="px-6 py-6 space-y-6 max-w-3xl">
       {error ? <ErrorBanner message={error} testId="settings-error" /> : null}
+
+      <section className="space-y-2">
+        <h2 className="text-xs uppercase tracking-wide text-[var(--text-dim)]">Model</h2>
+        <Card className="p-3 space-y-3" testId="llm-status">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge testId="llm-provider" tone={llm.usingOfflineFallback ? "warn" : "accent"}>
+              {llm.provider}
+            </Badge>
+            <div className="flex flex-wrap gap-3 text-xs text-[var(--text-mute)]">
+              {(["high", "mid", "light"] as const).map((tier) => (
+                <span key={tier} data-testid={`llm-model-${tier}`}>
+                  <span className="text-[var(--text-dim)]">{tier}</span>{" "}
+                  <span className="font-[family-name:var(--font-mono)]">{llm.models[tier]}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {llm.usingOfflineFallback ? (
+            <p data-testid="llm-offline-warning" className="text-xs text-[var(--warn)]">
+              No vendor key is set, so generation runs on deterministic offline fixtures rather
+              than a real model. Set one of the keys below and restart.
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            {llm.configuredKeys.map((key) => (
+              <span
+                key={key.id}
+                data-testid={`llm-key-${key.id}`}
+                className="inline-flex items-center gap-1.5 text-xs text-[var(--text-dim)]"
+                title={key.keyEnv}
+              >
+                <span className={key.present ? "text-[var(--ok)]" : "text-[var(--text-dim)]"}>
+                  {key.present ? "●" : "○"}
+                </span>
+                {key.label}
+              </span>
+            ))}
+          </div>
+
+          <p className="text-xs text-[var(--text-dim)]">
+            Keys are read from the environment and never stored in the database. Change them in{" "}
+            <code>.env</code> — see <code>.env.example</code>.
+          </p>
+        </Card>
+      </section>
 
       <section className="space-y-2">
         <h2 className="text-xs uppercase tracking-wide text-[var(--text-dim)]">Agents</h2>

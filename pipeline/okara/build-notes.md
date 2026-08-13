@@ -60,12 +60,52 @@ spec/ からの逸脱、判断、およびspecへのフィードバック。
 - **記事の800語下限**: offline fixture は約400語。実モデルでは満たすが、
   文字数バリデーションを品質ゲートに追加すべき
 
-## 5. Stage 4 (Skin/Ship) への引き継ぎ
+## 5. マルチLLMプロバイダ対応(spec範囲外・追加要件)
+
+spec 05-ai-features.md は Anthropic 前提だったが、Anthropic / OpenAI / Gemini /
+OpenCode Zen の4社に対応。`src/lib/llm/` にプロバイダレジストリとして再構成した。
+
+| プロバイダ | キー | エンドポイント | 構造化出力 |
+|---|---|---|---|
+| Anthropic | `ANTHROPIC_API_KEY` | 既定 | `output_config.format` (strict) |
+| OpenAI | `OPENAI_API_KEY` | 既定 | `response_format: json_schema` (strict) |
+| Gemini | `GEMINI_API_KEY` | 既定 | `responseSchema` (方言変換あり) |
+| OpenCode Zen | `OPENCODE_API_KEY` | `https://opencode.ai/zen/v1` | loose JSON → strict に自動昇格 |
+
+**設計判断**
+
+- **キーはDBではなく環境変数**。internal-first でキーは運用者が持つもの。
+  DB保存はキー漏洩の面を増やすだけで利点がない。Settings画面には
+  「どのキーが設定済みか」の●/○だけを出し、値は返さない(ユニットテストで検証)。
+- **`auto` の選択順**: Anthropic → OpenAI → Gemini → OpenCode。キーが1つも無ければ offline。
+- **モデルはプロバイダごとにティア既定値を持つ**。
+  解決順は `<PROVIDER>_MODEL_<TIER>` → `MODEL_<TIER>` → 既定値。
+  既存の `MODEL_HIGH` 等は後方互換で動く。
+- **Gemini のスキーマ方言**: `additionalProperties` を拒否し、nullable は
+  `type: ["integer","null"]` ではなく `nullable: true`。`toGeminiSchema` で変換(ユニットテスト済み)。
+- **OpenCode Zen は loose JSON がデフォルト**。Zen は Claude/GPT/Gemini/DeepSeek 等の
+  混成カタログで、全モデルが strict schema を実装しているとは限らないため。
+  エンドポイントが `json_schema` を受け入れたら strict に自動昇格する
+  (400/404/422 かつ schema 関連のメッセージのときだけ loose にフォールバック)。
+- **JSON抽出を堅牢化**: loose モードではコードフェンスや前置きが混ざるため、
+  フェンス除去 → 括弧走査(文字列内のカッコを無視)で最初の完全なJSON値を取り出す。
+
+**検証状況(正直に)**
+
+- 4社すべて実エンドポイントに到達し、無効キーで正しい401/400が返ることを確認済み
+  (= ベースURL・認証ヘッダ・SDK配線は正しい)
+- **有効なキーでの構造化出力パスは未検証**(キーを持っていないため)。
+  `npx tsx scripts/check-provider.ts <provider>` で1回の実呼び出しで確認できる
+- E2E は `WASABI_LLM_PROVIDER=offline` を強制するので、実キーがマシンにあっても
+  テスト結果は変わらない
+
+## 6. Stage 4 (Skin/Ship) への引き継ぎ
 
 - `src/brand.config.ts` の差し替えで全画面のリスキンが可能(`e2e/brand.spec.ts` で検証済み)
 - 本番投入前に必須:
   - `AUTH_SECRET` の実値設定(現在の .env はdev用)
-  - `ANTHROPIC_API_KEY` の設定(未設定だと offline プロバイダで静かに動作する)
+  - LLMキーを最低1つ設定(未設定だと offline プロバイダで静かに動作する。
+    Settings画面に警告が出るので気付けるようにした)
   - `WASABI_MOCK_EXTERNAL` を **設定しない**(1 のままだと外部連携が全てモックになる)
   - X / GitHub / Google の実OAuthフロー実装(現在は接続レコードを直接書く形)
 - ジョブの定期実行(cron または worker)の接続

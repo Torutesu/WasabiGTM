@@ -1,4 +1,4 @@
-import type { GenerateArgs } from "@/lib/llm";
+import type { GenerateArgs } from "./types";
 
 /**
  * Deterministic stand-ins for model output.
