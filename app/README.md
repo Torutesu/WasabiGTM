@@ -1,36 +1,96 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Wasabi — Growth OS
 
-## Getting Started
+An internal-first growth system: it reads a product's real context, generates
+channel work every cycle, gates it on quality before a human ever sees it, and
+measures what shipped so the next cycle is better informed.
 
-First, run the development server:
+Built from `pipeline/okara/spec/`. Build decisions and spec deviations are in
+`pipeline/okara/build-notes.md`.
+
+## Requirements
+
+- Node 20.9+
+- PostgreSQL 16
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+
+# Databases (one for development, one for the E2E suite)
+createdb wasabi && createdb wasabi_test
+
+# Development schema + seed user
+npm run db:migrate
+npm run db:seed
+
+# E2E schema
+npm run test:db:migrate
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Copy `.env` and set real values before doing anything beyond local work — in
+particular `AUTH_SECRET` and `ANTHROPIC_API_KEY`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `AUTH_SECRET` | Session signing key. **Replace the development value.** |
+| `ANTHROPIC_API_KEY` | Enables the real model. Without it the app runs the deterministic offline provider. |
+| `WASABI_LLM_PROVIDER` | `auto` (default), `anthropic`, or `offline` |
+| `WASABI_MOCK_EXTERNAL` | `1` mocks every outbound integration. **Never set this in production.** |
+| `MODEL_HIGH` / `MODEL_MID` / `MODEL_LIGHT` | Model per tier (see `src/lib/llm.ts`) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Running
 
-## Learn More
+```bash
+npm run dev          # http://localhost:3000
+npm run build        # production build
+npm start
+```
 
-To learn more about Next.js, take a look at the following resources:
+Sign in with the seeded user (`SEED_USER_EMAIL` / `SEED_USER_PASSWORD`).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tests
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run test:db:reset   # truncate + reseed the *_test database
+npm run test:e2e        # Playwright, P0 suite
+```
 
-## Deploy on Vercel
+The suite runs against a production build and mocks every external service, so
+it exercises application logic rather than network availability or model output.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Checks
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run typecheck
+npm run lint
+```
+
+## Layout
+
+```
+src/
+  brand.config.ts      Design tokens. Swap this file to reskin every screen.
+  lib/
+    llm.ts             Model tiers; Anthropic and offline providers
+    llm-offline.ts     Deterministic fixtures used by the E2E suite
+    context.ts         Living Context ingest + foundation documents (AIF-001/002)
+    agents.ts          Channel agents (AIF-003..007)
+    quality.ts         The anti-slop gate (AIF-008)
+    audit.ts           SEO and GEO audits (AIF-005)
+    jobs.ts            Job orchestration, retries, logging
+    external.ts        Every outbound integration, with mockable boundaries
+  app/
+    projects/[slug]/   The screens (feed, chat, docs, site, performance, …)
+    api/               Route handlers
+```
+
+## Notes
+
+- **Reddit posting is deliberately not implemented.** The agent finds threads and
+  drafts a reply; publishing is copy-and-paste by a human. Automated posting gets
+  accounts shadowbanned and is the failure mode this product exists to avoid.
+- **GitHub PRs are never auto-merged.** The coding agent opens a PR; a human merges.
+- A draft that fails the quality gate three times is dropped rather than shown,
+  and the drop is recorded on the job so it is visible rather than silent.

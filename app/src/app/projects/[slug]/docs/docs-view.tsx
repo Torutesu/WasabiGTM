@@ -80,12 +80,15 @@ export function DocsView({
   async function sync(sourceId: string) {
     setBusy(true);
     try {
-      await fetch(`/api/projects/${slug}/jobs`, {
+      const response = await fetch(`/api/projects/${slug}/sources/${sourceId}/sync`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: "CONTEXT_SYNC" }),
       });
-      flash("Sync complete");
+      const data = (await response.json().catch(() => ({}))) as { error?: string | null };
+      if (!response.ok) {
+        setError(data.error ?? "Sync failed");
+        return;
+      }
+      flash(data.error ? `Synced with an error: ${data.error}` : "Sync complete");
       router.refresh();
     } finally {
       setBusy(false);

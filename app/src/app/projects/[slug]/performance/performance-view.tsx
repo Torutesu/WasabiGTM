@@ -41,6 +41,18 @@ type Payload = {
 
 const PERIODS = ["7d", "28d", "90d"] as const;
 
+/** Kept outside the component so no state setter is reachable from the effect. */
+async function fetchPerformance(
+  slug: string,
+  period: string,
+): Promise<Payload | null> {
+  const response = await fetch(`/api/projects/${slug}/performance?period=${period}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) return null;
+  return (await response.json()) as Payload;
+}
+
 export function PerformanceView({ slug }: { slug: string }) {
   const [period, setPeriod] = useState<(typeof PERIODS)[number]>("28d");
   const [data, setData] = useState<Payload | null>(null);
@@ -50,21 +62,25 @@ export function PerformanceView({ slug }: { slug: string }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [urlDraft, setUrlDraft] = useState<Record<string, string>>({});
 
-  const load = useCallback(async () => {
-    setData(null);
-    const response = await fetch(`/api/projects/${slug}/performance?period=${period}`, {
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      setError("Could not load performance data.");
-      return;
-    }
-    setData((await response.json()) as Payload);
+  // State is written only after the await, so the effect never triggers a
+  // synchronous cascading render.
+  const reload = useCallback(async () => {
+    const next = await fetchPerformance(slug, period);
+    if (next) setData(next);
+    else setError("Could not load performance data.");
   }, [slug, period]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let stale = false;
+    void fetchPerformance(slug, period).then((next) => {
+      if (stale) return;
+      if (next) setData(next);
+      else setError("Could not load performance data.");
+    });
+    return () => {
+      stale = true;
+    };
+  }, [slug, period]);
 
   function flash(message: string) {
     setToast(message);
@@ -80,7 +96,7 @@ export function PerformanceView({ slug }: { slug: string }) {
         body: JSON.stringify({ kind: "WEEKLY_REVIEW" }),
       });
       flash("Weekly review written");
-      await load();
+      await reload();
     } finally {
       setBusy(false);
     }
@@ -95,7 +111,7 @@ export function PerformanceView({ slug }: { slug: string }) {
       body: JSON.stringify({ externalUrl: url }),
     });
     flash("URL attached — it will be measured on the next pull");
-    await load();
+    await reload();
   }
 
   return (

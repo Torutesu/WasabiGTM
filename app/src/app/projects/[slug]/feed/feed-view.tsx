@@ -52,6 +52,22 @@ const ARCHIVE_REASONS = [
   { value: "not_needed", label: "Not needed" },
 ];
 
+/** Kept outside the component so no state setter is reachable from the effect. */
+async function fetchCards(
+  slug: string,
+  status: string,
+  channel: string,
+  language: string,
+): Promise<FeedCard[] | null> {
+  const query = new URLSearchParams({ status });
+  if (channel) query.set("channel", channel);
+  if (language) query.set("language", language);
+  const response = await fetch(`/api/projects/${slug}/cards?${query}`, { cache: "no-store" });
+  if (!response.ok) return null;
+  const data = (await response.json()) as { cards?: FeedCard[] };
+  return data.cards ?? [];
+}
+
 export function FeedView({
   slug,
   languages,
@@ -72,20 +88,29 @@ export function FeedView({
   const [openId, setOpenId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A published card leaves this tab immediately, so hold on to the result and
+  // keep the link in view rather than letting it vanish with a toast.
+  const [lastResult, setLastResult] = useState<{ method: string; url: string | null } | null>(null);
 
-  const load = useCallback(async () => {
-    setCards(null);
-    const query = new URLSearchParams({ status: tab });
-    if (channelFilter) query.set("channel", channelFilter);
-    if (languageFilter) query.set("language", languageFilter);
-    const response = await fetch(`/api/projects/${slug}/cards?${query}`, { cache: "no-store" });
-    const data = (await response.json()) as { cards?: FeedCard[] };
-    setCards(data.cards ?? []);
+  // The previous list stays on screen while refetching rather than flashing a
+  // skeleton on every filter change.
+  const reload = useCallback(async () => {
+    const next = await fetchCards(slug, tab, channelFilter, languageFilter);
+    if (next) setCards(next);
+    else setError("Could not load the feed.");
   }, [slug, tab, channelFilter, languageFilter]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let stale = false;
+    void fetchCards(slug, tab, channelFilter, languageFilter).then((next) => {
+      if (stale) return;
+      if (next) setCards(next);
+      else setError("Could not load the feed.");
+    });
+    return () => {
+      stale = true;
+    };
+  }, [slug, tab, channelFilter, languageFilter]);
 
   function flash(message: string) {
     setToast(message);
@@ -103,6 +128,7 @@ export function FeedView({
             onClick={() => {
               setTab(value);
               setOpenId(null);
+              setLastResult(null);
             }}
           >
             {value[0] + value.slice(1).toLowerCase()}
@@ -143,6 +169,26 @@ export function FeedView({
 
       {error ? <ErrorBanner message={error} testId="feed-error" /> : null}
 
+      {lastResult ? (
+        <Card className="p-3 flex flex-wrap items-center gap-3 text-sm" testId="last-result">
+          <Badge tone="ok">{lastResult.method === "GITHUB_PR" ? "PR opened" : "Published"}</Badge>
+          {lastResult.url ? (
+            <a
+              data-testid={lastResult.method === "GITHUB_PR" ? "pr-url" : "publish-url"}
+              href={lastResult.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[var(--accent)] underline break-all"
+            >
+              {lastResult.url}
+            </a>
+          ) : null}
+          <Button variant="ghost" onClick={() => setLastResult(null)}>
+            Dismiss
+          </Button>
+        </Card>
+      ) : null}
+
       <div data-testid="feed-list" className="space-y-2">
         {cards === null ? (
           <Skeleton rows={4} />
@@ -157,14 +203,17 @@ export function FeedView({
         ) : (
           cards.map((card) => (
             <FeedCardRow
-              key={card.id}
+              // Keyed by the latest draft so a new version remounts the editor
+              // instead of syncing props into state with an effect.
+              key={`${card.id}:${card.drafts[0]?.id ?? "none"}`}
               slug={slug}
               card={card}
               open={openId === card.id}
               onToggle={() => setOpenId(openId === card.id ? null : card.id)}
-              onChanged={load}
+              onChanged={reload}
               onFlash={flash}
               onError={setError}
+              onPublished={setLastResult}
               xConnected={xConnected}
               githubConnected={githubConnected}
               cmsConnected={cmsConnected}
@@ -186,6 +235,7 @@ function FeedCardRow({
   onChanged,
   onFlash,
   onError,
+  onPublished,
   xConnected,
   githubConnected,
   cmsConnected,
@@ -197,11 +247,14 @@ function FeedCardRow({
   onChanged: () => Promise<void>;
   onFlash: (message: string) => void;
   onError: (message: string | null) => void;
+  onPublished: (result: { method: string; url: string | null }) => void;
   xConnected: boolean;
   githubConnected: boolean;
   cmsConnected: boolean;
 }) {
   const latest = card.drafts[0];
+  // Initialised from the draft; the parent's key remounts this row when a new
+  // draft version arrives, so there is no prop-to-state sync effect.
   const [body, setBody] = useState(latest?.content ?? "");
   const [dirty, setDirty] = useState(false);
   const [cardError, setCardError] = useState<string | null>(null);
@@ -210,11 +263,6 @@ function FeedCardRow({
   const [externalUrl, setExternalUrl] = useState("");
   const [askArchive, setAskArchive] = useState(false);
   const [archiveReason, setArchiveReason] = useState("inaccurate");
-
-  useEffect(() => {
-    setBody(latest?.content ?? "");
-    setDirty(false);
-  }, [latest?.content, latest?.id]);
 
   const quality = latest?.qualityReview;
   const meta = (latest?.meta ?? {}) as Record<string, unknown>;
@@ -260,6 +308,8 @@ function FeedCardRow({
       body: JSON.stringify({ method }),
     });
     if (result) {
+      const record = result.record as { externalUrl?: string | null } | undefined;
+      onPublished({ method, url: record?.externalUrl ?? null });
       onFlash(method === "GITHUB_PR" ? "Pull request opened" : "Published");
       await onChanged();
     }

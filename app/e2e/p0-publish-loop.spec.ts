@@ -156,7 +156,8 @@ test("E2E-011 published links carry a UTM and roll up into the performance funne
   await expect(row.getByTestId("record-impressions")).toContainText(/\d/);
   await expect(row.getByTestId("record-clicks")).toContainText(/\d/);
 
-  // utm_campaign=カードID が付与されている
+  // utm_campaign=カードID が付与されている (行の Details 内に表示される)
+  await row.getByRole("button", { name: "Details" }).click();
   await expect(row.getByTestId("record-utm")).toContainText(`utm_campaign=${cardId}`);
 });
 
