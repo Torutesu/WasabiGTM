@@ -25,12 +25,20 @@ function cloudflareRequest(): RequestContext | undefined {
   return global[CLOUDFLARE_CONTEXT]?.ctx;
 }
 
-function createClient(): PrismaClient {
+function createClient(onWorkers: boolean): PrismaClient {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL is not set");
   }
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  return new PrismaClient({
+    adapter: new PrismaPg({
+      connectionString,
+      // A Worker invocation may hold at most 6 concurrent connections, and
+      // exceeding it fails the request outright. Node has no such ceiling, so
+      // it keeps the driver's own default.
+      ...(onWorkers ? { max: 5 } : {}),
+    }),
+  });
 }
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
@@ -41,13 +49,13 @@ function client(): PrismaClient {
   if (request) {
     const existing = perRequest.get(request);
     if (existing) return existing;
-    const created = createClient();
+    const created = createClient(true);
     perRequest.set(request, created);
     return created;
   }
 
   // Held on the global so a dev server's hot reloads do not each open a pool.
-  globalForPrisma.prisma ??= createClient();
+  globalForPrisma.prisma ??= createClient(false);
   return globalForPrisma.prisma;
 }
 

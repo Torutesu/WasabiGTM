@@ -29,9 +29,19 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      "id": "replace-with-your-hyperdrive-id"
+      "id": "replace-with-your-hyperdrive-id",
+      // Local only — `wrangler dev` talks to this instead of Hyperdrive. It is
+      // the throwaway test database, never a real credential.
+      "localConnectionString": "postgresql://wasabi:wasabi@127.0.0.1:5432/wasabi_test"
     }
   ],
+
+  // This app issues many queries per request, and without this the Worker runs
+  // at the edge and every one of them round-trips to the database region.
+  // Smart Placement moves the Worker next to the database instead.
+  "placement": {
+    "mode": "smart"
+  },
 
   // The autonomous loop: every 15 minutes the scheduled handler calls
   // /api/cron/tick, which runs at most one due job.

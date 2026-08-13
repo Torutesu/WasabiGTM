@@ -20,18 +20,24 @@ Tunnel を代替として残してある。
 
 ### 1. データベース(Neon + Hyperdrive)
 
+https://console.neon.tech で無料プロジェクトを作り、接続文字列をコピーします。
+Hyperdrive 自体がプール層なので、**Pooled ではなく Direct connection** を選ぶこと。
+末尾のデータベース名(`/neondb`)まで含まれていないと `wrangler` が弾きます。
+
 ```bash
-# 1. Neon(無料枠)で Postgres を作り、接続文字列を控える
-# 2. Hyperdrive を作る(Worker から Postgres に繋ぐには接続プールが要る)
-npx wrangler hyperdrive create wasabi-db --connection-string "postgres://…"
+export NEON_URL="postgresql://neondb_owner:PASSWORD@ep-xxxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
+
+npx wrangler login
+npx wrangler hyperdrive create wasabi-db --connection-string "$NEON_URL"
 ```
 
 出力された id を `wrangler.jsonc` の `hyperdrive[0].id` に貼る。
-マイグレーションと初期ユーザーは手元から Neon に直接流す:
+マイグレーションと初期ユーザーは手元から Neon に直接流します(Worker 経由ではない):
 
 ```bash
-DATABASE_URL="postgres://…" npx prisma migrate deploy
-DATABASE_URL="postgres://…" npm run db:seed
+DATABASE_URL="$NEON_URL" npx prisma migrate deploy
+DATABASE_URL="$NEON_URL" SEED_USER_EMAIL="you@example.com" \
+  SEED_USER_PASSWORD="…" SEED_USER_NAME="…" npm run db:seed
 ```
 
 ### 2. シークレット
@@ -65,8 +71,8 @@ Node で動いても workerd で動くとは限らないので、リリース前
 
 ```bash
 cp .dev.vars.example .dev.vars     # wrangler が Worker の env として読む
-export WRANGLER_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE="postgresql://wasabi:wasabi@127.0.0.1:5432/wasabi_test"
-npm run cf:dev                     # http://127.0.0.1:8788
+npm run cf:dev                     # http://127.0.0.1:8788(DB は wrangler.jsonc の
+                                   # localConnectionString → ローカル Postgres)
 npm run test:e2e:workers           # 同じ E2E 17件を workerd に対して実行
 curl "http://127.0.0.1:8788/cdn-cgi/local/scheduled"   # Cron Trigger の手動発火
 ```
@@ -91,6 +97,10 @@ curl "http://127.0.0.1:8788/cdn-cgi/local/scheduled"   # Cron Trigger の手動�
   実行コンテキストごと破棄されます(オンボーディング解析が永久に終わらなくなる)。
 - **バンドルサイズは gzip 5.5MB / 上限 10MB**。余裕はあるが無限ではないので、
   重い依存を足したら `npx wrangler deploy --dry-run` で確認すること。
+- **DB接続は1インボケーションあたり最大6本**。超えるとリクエストごと失敗するので、
+  Workers 側だけ pg プールを `max: 5` に制限しています(Node は制限なし)。
+- **Smart Placement を有効化**(`placement.mode = "smart"`)。1リクエストで何本も
+  クエリを撃つアプリなので、エッジ実行のままだと毎回 DB リージョンまで往復します。
 
 ---
 
