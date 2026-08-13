@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { BadRequestError, projectBySlug, withUser } from "@/lib/api";
-import { ContextSourceKind } from "@/generated/prisma/client";
+import { ContextSourceKind } from "@wasabi/prisma/client";
 
 const KINDS = Object.values(ContextSourceKind) as string[];
 

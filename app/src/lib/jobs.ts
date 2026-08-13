@@ -14,7 +14,7 @@ import {
   JobStatus,
   Priority,
   ProjectStatus,
-} from "@/generated/prisma/client";
+} from "@wasabi/prisma/client";
 
 const MAX_ATTEMPTS = 3;
 

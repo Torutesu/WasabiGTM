@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { BadRequestError, projectBySlug, withUser } from "@/lib/api";
 import { runJob, startJob } from "@/lib/jobs";
-import { JobKind } from "@/generated/prisma/client";
+import { JobKind } from "@wasabi/prisma/client";
 
 const RUNNABLE: JobKind[] = [
   JobKind.DAILY_CYCLE,

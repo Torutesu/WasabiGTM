@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { BadRequestError, NotFoundError, projectBySlug, withUser } from "@/lib/api";
-import { CardStatus } from "@/generated/prisma/client";
+import { CardStatus } from "@wasabi/prisma/client";
 
 const REASONS = ["inaccurate", "off_voice", "not_needed"];
 

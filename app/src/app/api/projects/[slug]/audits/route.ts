@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { projectBySlug, withUser } from "@/lib/api";
-import { AuditKind } from "@/generated/prisma/client";
+import { AuditKind } from "@wasabi/prisma/client";
 
 export async function GET(_request: Request, ctx: RouteContext<"/api/projects/[slug]/audits">) {
   const { slug } = await ctx.params;

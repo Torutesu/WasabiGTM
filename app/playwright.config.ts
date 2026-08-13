@@ -2,6 +2,11 @@ import { defineConfig, devices } from "@playwright/test";
 
 const PORT = 3100;
 
+// Point the suite at a server that is already running — used to run the exact
+// same tests against the Cloudflare Workers build (`npm run cf:dev`) instead of
+// the Node one, since the runtimes differ enough to be worth checking.
+const EXTERNAL = process.env.E2E_BASE_URL;
+
 // The suite is entirely local: the app under test is on 127.0.0.1 and every
 // external integration is mocked. Clearing the proxy variables guarantees a
 // test can't reach the internet by accident.
@@ -31,7 +36,7 @@ export default defineConfig({
   timeout: 60_000,
   expect: { timeout: 15_000 },
   use: {
-    baseURL: `http://127.0.0.1:${PORT}`,
+    baseURL: EXTERNAL ?? `http://127.0.0.1:${PORT}`,
     trace: "retain-on-failure",
   },
   projects: [
@@ -46,15 +51,17 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: "npm run test:server",
-    url: `http://127.0.0.1:${PORT}/login`,
-    // `next start` reads PORT; passing it as an arg would not survive the
-    // build-then-start shell wrapper.
-    env: { PORT: String(PORT) },
-    reuseExistingServer: !process.env.CI,
-    timeout: 300_000,
-    stdout: "pipe",
-    stderr: "pipe",
-  },
+  webServer: EXTERNAL
+    ? undefined
+    : {
+        command: "npm run test:server",
+        url: `http://127.0.0.1:${PORT}/login`,
+        // `next start` reads PORT; passing it as an arg would not survive the
+        // build-then-start shell wrapper.
+        env: { PORT: String(PORT) },
+        reuseExistingServer: !process.env.CI,
+        timeout: 300_000,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
 });

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { BadRequestError, projectBySlug, withUser } from "@/lib/api";
-import { Channel } from "@/generated/prisma/client";
+import { Channel } from "@wasabi/prisma/client";
 
 const CHANNELS = Object.values(Channel) as string[];
 

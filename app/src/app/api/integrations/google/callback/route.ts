@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { projectBySlug } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { STATE_COOKIE, appOrigin, decodeState, saveConfig, toTokenSet } from "@/lib/oauth";
-import { IntegrationKind, IntegrationStatus } from "@/generated/prisma/client";
+import { IntegrationKind, IntegrationStatus } from "@wasabi/prisma/client";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

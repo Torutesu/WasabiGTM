@@ -6,7 +6,7 @@ import {
   toTokenSet,
 } from "@/lib/oauth";
 import { mintInstallationToken } from "@/lib/github-app";
-import { IntegrationKind, IntegrationStatus } from "@/generated/prisma/client";
+import { IntegrationKind, IntegrationStatus } from "@wasabi/prisma/client";
 
 /**
  * Every outbound integration goes through this module. Each has a live

@@ -8,7 +8,7 @@ import {
   pkceChallenge,
   randomString,
 } from "@/lib/oauth";
-import { IntegrationKind } from "@/generated/prisma/client";
+import { IntegrationKind } from "@wasabi/prisma/client";
 
 /** Starts the X OAuth 2.0 authorization-code flow with PKCE. */
 export async function GET(request: Request) {

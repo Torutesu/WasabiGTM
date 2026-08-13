@@ -1,0 +1,9 @@
+# Copy to .dev.vars for `npm run cf:dev`. wrangler loads it as Worker vars —
+# the app reads them from process.env exactly as it does in production.
+# Never commit the real file: it holds live secrets.
+AUTH_SECRET="test-secret-0123456789abcdef0123456789abcdef"
+CRON_SECRET="test-cron-secret"
+APP_URL="http://127.0.0.1:8788"
+WASABI_LLM_PROVIDER="offline"
+# Local runs only. Never set this on a deployed Worker.
+WASABI_MOCK_EXTERNAL="1"

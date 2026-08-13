@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { fetchPage, probeGeoCitations } from "@/lib/external";
 import { llm } from "@/lib/llm";
-import { AuditKind } from "@/generated/prisma/client";
+import { AuditKind } from "@wasabi/prisma/client";
 
 /**
  * AIF-005 — SEO and GEO audits.

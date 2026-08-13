@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { openConfig, sealConfig } from "@/lib/secrets";
-import { IntegrationKind, IntegrationStatus } from "@/generated/prisma/client";
+import { IntegrationKind, IntegrationStatus } from "@wasabi/prisma/client";
 
 /**
  * Shared OAuth plumbing: PKCE, the state round-trip, and token refresh.

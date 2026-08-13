@@ -8,12 +8,19 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "test:db:migrate": "dotenv -e .env.test -- prisma migrate deploy",
     "test:db:reset": "dotenv -e .env.test -- tsx scripts/reset-test-db.ts",
     "test:server": "dotenv -e .env.test -- sh -c 'next build && next start'",
     "test:e2e": "playwright test",
+    "cf:build": "BUILD_STANDALONE=1 opennextjs-cloudflare build",
+    "cf:preview": "BUILD_STANDALONE=1 opennextjs-cloudflare preview",
+    "cf:dev": "npm run cf:build && wrangler dev --port 8788 --ip 127.0.0.1",
+    "test:e2e:workers": "E2E_BASE_URL=http://127.0.0.1:8788 playwright test",
+    "cf:deploy": "BUILD_STANDALONE=1 opennextjs-cloudflare deploy",
     "test:unit": "tsx --test \"src/**/*.test.ts\"",
     "test": "npm run typecheck && npm run lint && npm run test:unit && npm run test:e2e"
   },
@@ -32,6 +39,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.2",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
@@ -43,6 +51,7 @@
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "^4.122.0"
   }
 }

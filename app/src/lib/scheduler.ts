@@ -1,6 +1,6 @@
 // Type-only so this module stays free of runtime imports and can be unit-tested
 // without pulling in the generated Prisma client.
-import type { JobKind } from "@/generated/prisma/client";
+import type { JobKind } from "@wasabi/prisma/client";
 
 /**
  * Decides what the autonomous loop should run next.

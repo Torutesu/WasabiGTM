@@ -3,7 +3,7 @@ import { llm } from "@/lib/llm";
 import type { ProjectContext } from "@/lib/context";
 import { runQualityGate } from "@/lib/quality";
 import { findRedditThreads, type RedditThread } from "@/lib/external";
-import { Channel, Difficulty, DraftAuthor, Priority } from "@/generated/prisma/client";
+import { Channel, Difficulty, DraftAuthor, Priority } from "@wasabi/prisma/client";
 
 /**
  * AIF-003..007 — the channel agents.

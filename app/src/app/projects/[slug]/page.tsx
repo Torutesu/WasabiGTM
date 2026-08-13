@@ -3,7 +3,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card } from "@/components/ui";
 import { JobControls } from "@/components/job-controls";
-import { CardStatus } from "@/generated/prisma/client";
+import { CardStatus } from "@wasabi/prisma/client";
 
 /** SCR-003 — Activity + today's summary. */
 export default async function DashboardPage({ params }: PageProps<"/projects/[slug]">) {

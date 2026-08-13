@@ -8,7 +8,7 @@ import {
   Difficulty,
   DraftAuthor,
   Priority,
-} from "@/generated/prisma/client";
+} from "@wasabi/prisma/client";
 
 export async function GET(request: Request, ctx: RouteContext<"/api/projects/[slug]/cards">) {
   const { slug } = await ctx.params;

@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { BadRequestError, NotFoundError, projectBySlug, withUser } from "@/lib/api";
-import { DraftAuthor } from "@/generated/prisma/client";
+import { DraftAuthor } from "@wasabi/prisma/client";
 
 /**
  * A human edit always creates a new draft version rather than mutating the

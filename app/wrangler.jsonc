@@ -1,0 +1,54 @@
+/**
+ * Cloudflare Workers deployment. See docs/deploy.md.
+ *
+ * Requires the Workers **Paid** plan ($5/month). The Free plan allows 10ms of
+ * CPU and 50 subrequests per request; one daily cycle makes dozens of model
+ * calls and needs minutes. Paid raises those to 5 minutes of CPU and 1000
+ * subrequests.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wasabi-growth-os",
+  // A thin entrypoint around OpenNext's generated worker: it adds the cron
+  // handler and bridges Hyperdrive's connection string to DATABASE_URL.
+  "main": "worker.ts",
+  "compatibility_date": "2025-09-01",
+  // nodejs_compat: Prisma, jose and bcryptjs all reach for node APIs.
+  // global_fetch_strictly_public: outbound fetch (the crawler, the model APIs)
+  // must leave the Worker instead of looping back into it.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  // Postgres over a Worker needs pooling in front of it. Hyperdrive's free tier
+  // (10 configs, 100k queries/day) fronts a Neon or Supabase free database.
+  //   npx wrangler hyperdrive create wasabi-db --connection-string "postgres://…"
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "replace-with-your-hyperdrive-id"
+    }
+  ],
+
+  // The autonomous loop: every 15 minutes the scheduled handler calls
+  // /api/cron/tick, which runs at most one due job.
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
+
+  "vars": {
+    "WASABI_LLM_PROVIDER": "auto"
+  },
+
+  // Secrets go through `wrangler secret put <NAME>`, never into this file:
+  //   AUTH_SECRET, CRON_SECRET, APP_URL, ANTHROPIC_API_KEY / OPENAI_API_KEY /
+  //   GEMINI_API_KEY / OPENCODE_API_KEY, X_CLIENT_ID, X_CLIENT_SECRET,
+  //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GITHUB_APP_ID, GITHUB_APP_SLUG,
+  //   GITHUB_APP_PRIVATE_KEY, PERPLEXITY_API_KEY.
+  "observability": {
+    "enabled": true
+  }
+}

@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { BadRequestError, projectBySlug, withUser } from "@/lib/api";
 import { llm } from "@/lib/llm";
 import { loadProjectContext } from "@/lib/context";
-import { FoundationDocKind } from "@/generated/prisma/client";
+import { FoundationDocKind } from "@wasabi/prisma/client";
 
 /** AIF-011 — the CMO chat. Context refs are surfaced so the answer is auditable. */
 

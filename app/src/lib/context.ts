@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { db } from "@/lib/db";
 import { fetchPage } from "@/lib/external";
 import { llm } from "@/lib/llm";
-import { ContextSourceKind, FoundationDocKind } from "@/generated/prisma/client";
+import { ContextSourceKind, FoundationDocKind } from "@wasabi/prisma/client";
 
 /** AIF-001: Living Context Layer — ingest, snapshot, detect change. */
 

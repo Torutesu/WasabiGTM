@@ -4,7 +4,10 @@
 
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
+# The schema comes along because `npm ci` runs `prisma generate` on postinstall
+# — the client is generated into node_modules, not committed.
+COPY package.json package-lock.json prisma.config.ts ./
+COPY prisma ./prisma
 RUN npm ci --no-audit --no-fund --maxsockets 4
 
 FROM node:22-alpine AS build
@@ -14,9 +17,8 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 # Emits .next/standalone; off by default so `next start` keeps working locally.
 ENV BUILD_STANDALONE=1
-# `prisma generate` only reads the URL, it never connects — the real one is
-# supplied at runtime.
-ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
+# Regenerated here as well: the deps layer is cached on package files alone, so
+# a schema change would otherwise build against a stale client.
 RUN npx prisma generate && npm run build
 
 # The build stage keeps the Prisma CLI and tsx, so migrations and seeding run

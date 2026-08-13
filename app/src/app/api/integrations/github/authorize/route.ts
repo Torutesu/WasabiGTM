@@ -3,7 +3,7 @@ import { errorResponse, projectBySlug } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { STATE_COOKIE, encodeState, randomString } from "@/lib/oauth";
 import { appConfigured, appSlug } from "@/lib/github-app";
-import { IntegrationKind } from "@/generated/prisma/client";
+import { IntegrationKind } from "@wasabi/prisma/client";
 
 /**
  * Sends the user to install the GitHub App on the repository they want fixes

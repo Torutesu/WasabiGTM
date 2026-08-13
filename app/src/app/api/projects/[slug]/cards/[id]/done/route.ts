@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { NotFoundError, projectBySlug, withUser } from "@/lib/api";
-import { CardStatus, PublishMethod } from "@/generated/prisma/client";
+import { CardStatus, PublishMethod } from "@wasabi/prisma/client";
 
 /**
  * Marks a manually-published card done. The external URL is optional but is what

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { FeedView } from "./feed-view";
-import { IntegrationKind } from "@/generated/prisma/client";
+import { IntegrationKind } from "@wasabi/prisma/client";
 
 /** SCR-010 — the daily opportunity queue. */
 export default async function FeedPage({ params }: PageProps<"/projects/[slug]/feed">) {

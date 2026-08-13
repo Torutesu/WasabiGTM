@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { errorResponse, projectBySlug } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { STATE_COOKIE, appOrigin, encodeState, randomString } from "@/lib/oauth";
-import { IntegrationKind } from "@/generated/prisma/client";
+import { IntegrationKind } from "@wasabi/prisma/client";
 
 /**
  * One consent screen covers both Search Console and Analytics; `kind` decides

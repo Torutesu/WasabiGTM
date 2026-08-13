@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { runJob, startJob } from "@/lib/jobs";
 import { STALE_JOB_MINUTES, planTick, type ProjectSchedule } from "@/lib/scheduler";
-import { JobKind, JobStatus, ProjectStatus } from "@/generated/prisma/client";
+import { JobKind, JobStatus, ProjectStatus } from "@wasabi/prisma/client";
 
 /**
  * The heartbeat of the autonomous loop.

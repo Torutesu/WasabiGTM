@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { BadRequestError, projectBySlug, withUser } from "@/lib/api";
 import { saveConfig } from "@/lib/oauth";
-import { IntegrationKind, IntegrationStatus } from "@/generated/prisma/client";
+import { IntegrationKind, IntegrationStatus } from "@wasabi/prisma/client";
 
 const KINDS = Object.values(IntegrationKind) as string[];
 

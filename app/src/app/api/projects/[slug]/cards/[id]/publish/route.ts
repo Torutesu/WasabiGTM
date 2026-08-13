@@ -15,7 +15,7 @@ import {
   IntegrationKind,
   PublishMethod,
   type Channel,
-} from "@/generated/prisma/client";
+} from "@wasabi/prisma/client";
 
 /**
  * Publishes a card through the requested channel. Integration failures leave the

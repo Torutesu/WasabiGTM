@@ -4,7 +4,7 @@ import { projectBySlug } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { STATE_COOKIE, appOrigin, decodeState, saveConfig } from "@/lib/oauth";
 import { installationRepos, mintInstallationToken, pickRepo } from "@/lib/github-app";
-import { IntegrationKind, IntegrationStatus } from "@/generated/prisma/client";
+import { IntegrationKind, IntegrationStatus } from "@wasabi/prisma/client";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

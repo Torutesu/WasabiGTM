@@ -1,8 +1,9 @@
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { BadRequestError, withUser } from "@/lib/api";
 import { runJob, startJob } from "@/lib/jobs";
 import { slugify } from "@/lib/external";
-import { ContextSourceKind, JobKind, ProjectStatus } from "@/generated/prisma/client";
+import { ContextSourceKind, JobKind, ProjectStatus } from "@wasabi/prisma/client";
 
 export async function GET() {
   return withUser(async () => {
@@ -56,7 +57,11 @@ export async function POST(request: Request) {
 
     const jobId = await startJob(project.id, JobKind.ONBOARD_ANALYSIS);
     // Kick off in the background; the analysis screen streams the job log.
-    void runJob(jobId);
+    // `after` rather than a bare `void`: on a serverless host the request's
+    // execution context is torn down once the response is sent, and detached
+    // work is killed with it. `after` hands the promise to the platform's
+    // waitUntil so the analysis survives to completion.
+    after(() => runJob(jobId));
 
     return { project, jobId };
   });

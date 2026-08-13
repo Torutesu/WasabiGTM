@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { BadRequestError, NotFoundError, projectBySlug, withUser } from "@/lib/api";
-import { FoundationDocKind } from "@/generated/prisma/client";
+import { FoundationDocKind } from "@wasabi/prisma/client";
 
 const KINDS = Object.values(FoundationDocKind) as string[];
 

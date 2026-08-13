@@ -125,7 +125,7 @@ Stage 3 完了時点で「接続レコードを直接書く」形だったコネ
 | GSC/GA 実指標 | Google OAuth(offline)→ GA `runReport`(`sessionCampaignName` = cardId)+ GSC `searchAnalytics/query`(page 一致) | `api/integrations/google/*`, `external.ts` |
 | X 指標 | `/2/tweets?ids=…&tweet.fields=public_metrics` | `external.ts` |
 | スケジューラ | `POST/GET /api/cron/tick`(bearer or `?key=`)。1 tick = 最大1ジョブ | `src/lib/scheduler.ts`, `api/cron/tick` |
-| デプロイ | Docker + Cloudflare Tunnel(無料)/ Workers + Hyperdrive(有料) | `Dockerfile`, `deploy/`, `docs/deploy.md` |
+| デプロイ | Cloudflare Workers + Hyperdrive(本命)/ Docker + Tunnel(代替) | `wrangler.jsonc`, `worker.ts`, `Dockerfile`, `deploy/`, `docs/deploy.md` |
 
 ### 設計判断
 
@@ -154,3 +154,27 @@ Stage 3 完了時点で「接続レコードを直接書く」形だったコネ
   コードパスは E2E ではモック側を通る。実接続時に最初に落ちるとしたら
   redirect URI の不一致(`APP_URL` 設定漏れ)が最有力。
 - **未検証**: Cloudflare Workers 経路(`deploy/cloudflare/`)。設定ファイルのみ提供。
+
+## 8. Cloudflare Workers 対応(Stage 3 追補2)
+
+デプロイ先を Workers に確定し、実際に workerd 上で E2E 17件が通るまで詰めた。
+`@opennextjs/cloudflare` + Hyperdrive + Neon 構成。
+
+### 踏んで直した Workers 固有の問題
+
+| 症状 | 原因 | 対処 |
+|---|---|---|
+| `WebAssembly.Module(): Wasm code generation disallowed` | Prisma 7 の WASM クエリコンパイラ。Node 版はバイト列から `new WebAssembly.Module()` するが Workers は動的コード生成を禁止 | Prisma を `serverExternalPackages` に入れ、Next にバンドルさせず host bundler(workerd condition)に解決させる |
+| 上記が直らない | import が `@/generated/prisma/client`(相対パス)で、package.json の export conditions が効いていなかった | 生成先を `node_modules/@wasabi/prisma` に移し、パッケージ指定子で import |
+| `Could not resolve "pg-cloudflare"` | `pg` が guarded require で読むため Next のトレースから漏れる | `outputFileTracingIncludes` で明示 |
+| 数リクエスト後に「応答を返さない」と判定されて強制終了 | Prisma クライアントをプロセス共有シングルトンにしていた。Worker はリクエストをまたいでソケットを持ち越せない | `src/lib/db.ts` を Proxy 化し、Cloudflare のリクエストコンテキスト(`Symbol.for("__cloudflare-context__")`)を鍵に**リクエストごと**のクライアントを返す。Node は従来どおりシングルトン |
+| オンボーディング解析が永久に終わらない | `void runJob(jobId)` の投げっぱなしがレスポンス送出と同時に破棄される | `after()` でプラットフォームの waitUntil に渡す |
+| Cron Trigger が exception で終わる | `ctx.waitUntil` 経由だと失敗が表に出ない | `scheduled` 内で await する(scheduled はハンドラの Promise が解決するまで生存する) |
+
+### 検証状況
+
+- **workerd 上で E2E 17件すべて通過**(`npm run test:e2e:workers`、ローカル Hyperdrive → Postgres)
+- Cron Trigger の手動発火(`/cdn-cgi/local/scheduled`)で METRIC_PULL が SUCCESS まで実行
+- `wrangler deploy --dry-run`: バンドル gzip 5.46MB(Workers の上限 10MB)
+- Node 経路(Docker イメージ)も再検証済み。両方の経路が同じコードで動く
+- **未検証**: 実アカウントへの `wrangler deploy`(Cloudflare アカウントが必要)
