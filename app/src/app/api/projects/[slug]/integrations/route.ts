@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { BadRequestError, projectBySlug, withUser } from "@/lib/api";
+import { saveConfig } from "@/lib/oauth";
 import { IntegrationKind, IntegrationStatus } from "@/generated/prisma/client";
 
 const KINDS = Object.values(IntegrationKind) as string[];
@@ -42,24 +43,19 @@ export async function PUT(request: Request, ctx: RouteContext<"/api/projects/[sl
     const kind = body.kind as IntegrationKind;
     const status = (body.status as IntegrationStatus) ?? IntegrationStatus.CONNECTED;
 
-    const existing = await db.integration.findUnique({
-      where: { projectId_kind: { projectId: project.id, kind } },
+    // saveConfig seals the secret-bearing fields, so a token handed to this
+    // endpoint (a GitHub PAT, a CMS shared secret) never lands in plaintext.
+    await saveConfig({
+      projectId: project.id,
+      kind,
+      status,
+      label: body.label ?? null,
+      config: body.config ?? {},
+      merge: true,
     });
-    const mergedConfig = {
-      ...((existing?.config ?? {}) as Record<string, unknown>),
-      ...(body.config ?? {}),
-    };
 
-    const integration = await db.integration.upsert({
+    const integration = await db.integration.findUniqueOrThrow({
       where: { projectId_kind: { projectId: project.id, kind } },
-      update: { status, label: body.label ?? existing?.label, config: mergedConfig as never },
-      create: {
-        projectId: project.id,
-        kind,
-        status,
-        label: body.label ?? null,
-        config: mergedConfig as never,
-      },
     });
 
     return {

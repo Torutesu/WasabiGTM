@@ -109,3 +109,48 @@ OpenCode Zen の4社に対応。`src/lib/llm/` にプロバイダレジストリ
   - `WASABI_MOCK_EXTERNAL` を **設定しない**(1 のままだと外部連携が全てモックになる)
   - X / GitHub / Google の実OAuthフロー実装(現在は接続レコードを直接書く形)
 - ジョブの定期実行(cron または worker)の接続
+
+## 7. 実コネクタ + スケジューラ + デプロイ(Stage 3 追補)
+
+Stage 3 完了時点で「接続レコードを直接書く」形だったコネクタを、実際に外部へ届く実装に置き換えた。
+
+### 実装したもの
+
+| 機能 | 実体 | ファイル |
+|---|---|---|
+| トークンの暗号化保存 | AES-GCM(`AUTH_SECRET` から SHA-256 で鍵導出)、WebCrypto のみ使用 | `src/lib/secrets.ts` |
+| OAuth 共通基盤 | PKCE / state cookie / リフレッシュ / `APP_URL` 解決 | `src/lib/oauth.ts` |
+| X 実投稿 | OAuth 2.0 + PKCE → `POST /2/tweets`、401 は TOKEN_EXPIRED に変換 | `api/integrations/x/*`, `external.ts` |
+| GitHub 実PR | App インストール → installation token(1時間、キャッシュ付き)→ base ref 取得 → ブランチ作成 → contents PUT → PR 作成 | `src/lib/github-app.ts`, `external.ts` |
+| GSC/GA 実指標 | Google OAuth(offline)→ GA `runReport`(`sessionCampaignName` = cardId)+ GSC `searchAnalytics/query`(page 一致) | `api/integrations/google/*`, `external.ts` |
+| X 指標 | `/2/tweets?ids=…&tweet.fields=public_metrics` | `external.ts` |
+| スケジューラ | `POST/GET /api/cron/tick`(bearer or `?key=`)。1 tick = 最大1ジョブ | `src/lib/scheduler.ts`, `api/cron/tick` |
+| デプロイ | Docker + Cloudflare Tunnel(無料)/ Workers + Hyperdrive(有料) | `Dockerfile`, `deploy/`, `docs/deploy.md` |
+
+### 設計判断
+
+- **トークンは暗号化して保存、APIキーは環境変数のまま**。前者はユーザーが画面から
+  接続するもので DB に置くしかないが、後者は運用者が持つもので DB に置く利点がない。
+- **スケジューラは 1 tick = 1 ジョブ**。Workers の CPU 上限にも、素の crontab にも
+  同じ形で載る。同一プロジェクトで RUNNING があれば起動せず、30分進捗が無い RUNNING は
+  失敗として回収する(プロセスが死んだ場合に永久に busy にならないため)。
+- **ジョブの優先順は AUDIT → METRIC_PULL → WEEKLY_REVIEW → DAILY_CYCLE**。
+  出力(cycle)より先に入力(監査・指標・学習)を更新するため。
+  複数プロジェクトでは「最も遅延しているもの」を先に処理する。
+- **GA の帰属は UTM**。publish 時に `utm_campaign=<cardId>` を刻んでいるので、
+  GA を campaign 次元で引けばカード単位に戻る。GSC には campaign 次元が無いので
+  page 一致(クエリ文字列は無視)で記事に当てる。
+- **GitHub は PAT と App の両対応**。App は秘密鍵の PKCS#8 変換が要るため、
+  すぐ試したい場合の逃げ道として fine-grained token 入力も残した。どちらもマージはしない。
+- **Workers 無料プランは不可**(CPU 10ms/req、サブリクエスト 50/req)。
+  「できるだけ無料で」の要求には *自前マシン + Cloudflare Tunnel* で応えた。
+
+### 検証状況(正直に)
+
+- **検証済み**: Docker イメージのビルド → 起動 → `/login` 200 →
+  `POST /api/cron/tick` が実 Postgres に対して DAILY_CYCLE を SUCCESS まで実行 →
+  秘密なしのリクエストは 401。E2E 17件(既存16 + scheduler 1)と unit 34件が通過。
+- **未検証**: X / Google / GitHub の実 OAuth 往復(各社のアプリ登録が必要なため)。
+  コードパスは E2E ではモック側を通る。実接続時に最初に落ちるとしたら
+  redirect URI の不一致(`APP_URL` 設定漏れ)が最有力。
+- **未検証**: Cloudflare Workers 経路(`deploy/cloudflare/`)。設定ファイルのみ提供。

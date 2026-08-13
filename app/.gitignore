@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the two that carry no real secrets: the documented template, and
+# the test-only values the E2E suite needs on a fresh clone.
+!.env.example
+!.env.test
 
 # vercel
 .vercel

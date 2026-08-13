@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // The container runs .next/standalone, so the server and everything it
+  // traces must be emitted. Only for that build: `next start` refuses to serve
+  // a standalone output, and that is what local runs and the E2E suite use.
+  ...(process.env.BUILD_STANDALONE === "1" ? { output: "standalone" as const } : {}),
+  // Lockfiles exist both here and one level up; without pinning the root Next
+  // traces from the wrong directory and the standalone bundle loses files.
+  outputFileTracingRoot: dirname(fileURLToPath(import.meta.url)),
 };
 
 export default nextConfig;

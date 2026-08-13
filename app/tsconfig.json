@@ -30,5 +30,7 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  // deploy/** targets other runtimes (Cloudflare Workers) and is compiled
+  // there, not by this project's build.
+  "exclude": ["node_modules", "deploy"]
 }

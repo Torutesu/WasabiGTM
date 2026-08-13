@@ -3,7 +3,7 @@ import { llm } from "@/lib/llm";
 import { runChannelAgent } from "@/lib/agents";
 import { runGeoAudit, runSeoAudit, type Issue } from "@/lib/audit";
 import { generateFoundationDocs, ingestSource, loadProjectContext } from "@/lib/context";
-import { pullMetrics, sendNotification } from "@/lib/external";
+import { integrationConfig, pullMetrics, sendNotification } from "@/lib/external";
 import {
   Channel,
   ContextSourceKind,
@@ -225,7 +225,7 @@ async function dailyCycle(jobId: string, projectId: string): Promise<void> {
   });
   if (notify && created > 0) {
     await sendNotification(
-      notify.config as Record<string, unknown>,
+      await integrationConfig(projectId, notify.kind),
       `${created} cards ready for ${project.name}: /projects/${project.slug}/feed`,
     );
   }
@@ -339,21 +339,27 @@ async function auditJob(jobId: string, projectId: string): Promise<void> {
 // --------------------------------------------------------------- METRIC PULL
 
 async function metricPull(jobId: string, projectId: string): Promise<void> {
-  const [records, integrations] = await Promise.all([
+  const [records, gsc, ga, x] = await Promise.all([
     db.publishRecord.findMany({ where: { projectId } }),
-    db.integration.findMany({ where: { projectId } }),
+    integrationConfig(projectId, IntegrationKind.GSC),
+    integrationConfig(projectId, IntegrationKind.GA),
+    integrationConfig(projectId, IntegrationKind.X_OAUTH),
   ]);
 
-  const find = (kind: IntegrationKind) =>
-    integrations.find((i) => i.kind === kind && i.status === "CONNECTED")?.config as
-      | Record<string, unknown>
-      | undefined;
-
   const { perRecord, snapshots } = await pullMetrics({
-    gsc: find(IntegrationKind.GSC) ?? null,
-    ga: find(IntegrationKind.GA) ?? null,
-    x: find(IntegrationKind.X_OAUTH) ?? null,
-    records: records.map((r) => ({ id: r.id, channel: r.channel, publishedAt: r.publishedAt })),
+    projectId,
+    gsc,
+    ga,
+    x,
+    // cardId is what GA attribution keys on (it is the utm_campaign we stamp);
+    // externalUrl is what Search Console and X match on.
+    records: records.map((r) => ({
+      id: r.id,
+      cardId: r.cardId,
+      channel: r.channel,
+      externalUrl: r.externalUrl,
+      publishedAt: r.publishedAt,
+    })),
     today: new Date(),
   });
 

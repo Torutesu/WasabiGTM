@@ -6,54 +6,156 @@ import { Badge, Button, Card, ErrorBanner, Toast } from "@/components/ui";
 
 type Integration = { kind: string; status: string; label: string | null };
 
-const CATALOG = [
+/** Which credential paths the server actually has configured. */
+export type Providers = {
+  x: boolean;
+  google: boolean;
+  githubApp: boolean;
+  /** E2E and local demos: connect writes a fake record instead of leaving the app. */
+  mock: boolean;
+};
+
+type Field = { key: string; label: string; testId: string; placeholder: string; secret?: boolean };
+
+type CatalogItem = {
+  kind: string;
+  name: string;
+  detail: string;
+  connectLabel: string;
+  /** OAuth-style handoff to the provider. */
+  authorize?: (slug: string) => string;
+  /** Credentials typed in by the user. */
+  fields?: Field[];
+  /** Shown when the provider's server-side credentials are missing. */
+  missingHint?: string;
+};
+
+const CATALOG: CatalogItem[] = [
   {
     kind: "X_OAUTH",
     name: "X (Twitter)",
     detail: "Post approved drafts. Posting scope only.",
     connectLabel: "Connect",
+    authorize: (slug) => `/api/integrations/x/authorize?project=${encodeURIComponent(slug)}`,
+    missingHint: "Set X_CLIENT_ID / X_CLIENT_SECRET to enable this.",
   },
   {
     kind: "GITHUB_APP",
     name: "GitHub",
     detail: "Open pull requests for site fixes. Never merges.",
-    connectLabel: "Connect",
+    connectLabel: "Install app",
+    authorize: (slug) => `/api/integrations/github/authorize?project=${encodeURIComponent(slug)}`,
+    fields: [
+      { key: "repo", label: "Repository", testId: "github-repo", placeholder: "owner/name" },
+      {
+        key: "githubToken",
+        label: "Fine-grained token",
+        testId: "github-token",
+        placeholder: "github_pat_…",
+        secret: true,
+      },
+    ],
+    missingHint: "No GitHub App configured — paste a fine-grained token instead.",
   },
-  { kind: "GSC", name: "Search Console", detail: "Clicks, impressions, queries.", connectLabel: "Connect" },
-  { kind: "GA", name: "Analytics", detail: "Sessions and users.", connectLabel: "Connect" },
+  {
+    kind: "GSC",
+    name: "Search Console",
+    detail: "Clicks, impressions, queries.",
+    connectLabel: "Connect",
+    authorize: (slug) =>
+      `/api/integrations/google/authorize?project=${encodeURIComponent(slug)}&kind=GSC`,
+    missingHint: "Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET to enable this.",
+  },
+  {
+    kind: "GA",
+    name: "Analytics",
+    detail: "Sessions and users.",
+    connectLabel: "Connect",
+    authorize: (slug) =>
+      `/api/integrations/google/authorize?project=${encodeURIComponent(slug)}&kind=GA`,
+    missingHint: "Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET to enable this.",
+  },
   {
     kind: "CMS_WEBHOOK",
     name: "CMS publish",
     detail: "Publish articles to your own site.",
     connectLabel: "Configure",
-    configurable: true,
+    fields: [
+      {
+        key: "webhookUrl",
+        label: "Webhook URL",
+        testId: "cms-webhook-url",
+        placeholder: "https://…/webhook",
+      },
+      {
+        key: "secret",
+        label: "Shared secret",
+        testId: "cms-secret",
+        placeholder: "Shared secret",
+        secret: true,
+      },
+    ],
   },
   {
     kind: "SLACK_WEBHOOK",
     name: "Slack notifications",
     detail: "Ping when a cycle produces cards.",
     connectLabel: "Configure",
-    configurable: true,
+    fields: [
+      {
+        key: "webhookUrl",
+        label: "Webhook URL",
+        testId: "notify-url",
+        placeholder: "https://hooks.slack.com/…",
+      },
+      {
+        key: "secret",
+        label: "Shared secret",
+        testId: "notify-secret",
+        placeholder: "Optional",
+        secret: true,
+      },
+    ],
   },
 ];
+
+/** Whether the provider's server-side credentials exist for this item. */
+function available(item: CatalogItem, providers: Providers): boolean {
+  if (!item.authorize) return true;
+  switch (item.kind) {
+    case "X_OAUTH":
+      return providers.x;
+    case "GITHUB_APP":
+      return providers.githubApp;
+    case "GSC":
+    case "GA":
+      return providers.google;
+    default:
+      return true;
+  }
+}
 
 export function IntegrationsView({
   slug,
   integrations,
+  providers,
+  notice,
 }: {
   slug: string;
   integrations: Integration[];
+  providers: Providers;
+  notice?: { connected?: string; error?: string };
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(notice?.connected ? `${notice.connected} connected` : null);
+  const [error, setError] = useState<string | null>(notice?.error ?? null);
   const [configuring, setConfiguring] = useState<string | null>(null);
-  const [webhookUrl, setWebhookUrl] = useState("");
-  const [secret, setSecret] = useState("");
+  const [values, setValues] = useState<Record<string, string>>({});
 
   const statusOf = (kind: string) =>
     integrations.find((i) => i.kind === kind)?.status ?? "DISCONNECTED";
+  const labelOf = (kind: string) => integrations.find((i) => i.kind === kind)?.label ?? null;
 
   function flash(message: string) {
     setToast(message);
@@ -80,16 +182,26 @@ export function IntegrationsView({
     }
   }
 
-  async function connect(kind: string) {
-    // In a live deployment this hands off to the provider's OAuth flow; the
-    // callback then writes the same record with the real tokens.
-    const ok = await upsert(kind, "CONNECTED", {
-      handle: "founder",
-      repo: "wasabi/site",
-      accessToken: "connected-via-oauth",
-      expired: false,
-    });
-    if (ok) flash(`${kind} connected`);
+  async function connect(item: CatalogItem) {
+    if (providers.mock) {
+      // Mock mode keeps the whole loop inside the app so it can be exercised
+      // without third-party accounts. Never enabled in production.
+      const ok = await upsert(item.kind, "CONNECTED", {
+        handle: "founder",
+        repo: "wasabi/site",
+        accessToken: "connected-via-oauth",
+        expired: false,
+      });
+      if (ok) flash(`${item.kind} connected`);
+      return;
+    }
+
+    if (item.authorize && available(item, providers)) {
+      // A full-page navigation, because the provider will not render in a frame.
+      window.location.assign(item.authorize(slug));
+      return;
+    }
+    setConfiguring(item.kind);
   }
 
   async function disconnect(kind: string) {
@@ -103,13 +215,17 @@ export function IntegrationsView({
     }
   }
 
-  async function saveConfig(kind: string) {
-    const ok = await upsert(kind, "CONNECTED", { webhookUrl, secret });
+  async function saveFields(item: CatalogItem) {
+    const config: Record<string, unknown> = {};
+    for (const field of item.fields ?? []) {
+      const value = values[`${item.kind}.${field.key}`] ?? "";
+      if (value) config[field.key] = value;
+    }
+    const ok = await upsert(item.kind, "CONNECTED", config);
     if (ok) {
       setConfiguring(null);
-      setWebhookUrl("");
-      setSecret("");
-      flash(`${kind} configured`);
+      setValues({});
+      flash(`${item.kind} configured`);
     }
   }
 
@@ -119,6 +235,11 @@ export function IntegrationsView({
 
       {CATALOG.map((item) => {
         const status = statusOf(item.kind);
+        const label = labelOf(item.kind);
+        const oauthReady = Boolean(item.authorize) && available(item, providers);
+        const canType = Boolean(item.fields);
+        // Items with no provider handoff go straight to their form.
+        const formOnly = !item.authorize && canType;
         return (
           <Card key={item.kind} className="p-4 space-y-3">
             <div className="flex flex-wrap items-center gap-3">
@@ -136,7 +257,17 @@ export function IntegrationsView({
               </span>
               <div className="flex-1 min-w-0">
                 <div className="text-sm">{item.name}</div>
-                <div className="text-xs text-[var(--text-dim)]">{item.detail}</div>
+                <div className="text-xs text-[var(--text-dim)]">
+                  {status === "CONNECTED" && label ? label : item.detail}
+                </div>
+                {!providers.mock && !oauthReady && item.missingHint && status === "DISCONNECTED" ? (
+                  <div
+                    className="text-xs text-[var(--text-dim)] mt-1"
+                    data-testid={`hint-${item.kind}`}
+                  >
+                    {item.missingHint}
+                  </div>
+                ) : null}
               </div>
               <Badge
                 testId={`status-${item.kind}`}
@@ -146,20 +277,31 @@ export function IntegrationsView({
               </Badge>
 
               {status === "DISCONNECTED" ? (
-                <Button
-                  testId={item.configurable ? `configure-${item.kind}` : `connect-${item.kind}`}
-                  onClick={() =>
-                    item.configurable ? setConfiguring(item.kind) : connect(item.kind)
-                  }
-                  disabled={busy}
-                >
-                  {item.connectLabel}
-                </Button>
+                <>
+                  <Button
+                    testId={formOnly ? `configure-${item.kind}` : `connect-${item.kind}`}
+                    onClick={() => (formOnly ? setConfiguring(item.kind) : connect(item))}
+                    disabled={busy}
+                  >
+                    {providers.mock || oauthReady || formOnly ? item.connectLabel : "Configure"}
+                  </Button>
+                  {/* An App install and a pasted token are both valid ways in. */}
+                  {!providers.mock && oauthReady && canType ? (
+                    <Button
+                      testId={`configure-${item.kind}`}
+                      variant="ghost"
+                      onClick={() => setConfiguring(item.kind)}
+                      disabled={busy}
+                    >
+                      Use a token
+                    </Button>
+                  ) : null}
+                </>
               ) : status === "ERROR" ? (
                 <Button
                   testId={`reconnect-${item.kind}`}
                   variant="primary"
-                  onClick={() => connect(item.kind)}
+                  onClick={() => connect(item)}
                   disabled={busy}
                 >
                   Reconnect
@@ -188,27 +330,31 @@ export function IntegrationsView({
               )}
             </div>
 
-            {configuring === item.kind ? (
+            {configuring === item.kind && item.fields ? (
               <div className="space-y-2 rounded-[var(--radius)] border border-[var(--accent)] p-3">
-                <input
-                  data-testid={item.kind === "CMS_WEBHOOK" ? "cms-webhook-url" : "notify-url"}
-                  value={webhookUrl}
-                  onChange={(e) => setWebhookUrl(e.target.value)}
-                  placeholder="https://…/webhook"
-                  className="w-full text-sm"
-                />
-                <input
-                  data-testid={item.kind === "CMS_WEBHOOK" ? "cms-secret" : "notify-secret"}
-                  value={secret}
-                  onChange={(e) => setSecret(e.target.value)}
-                  placeholder="Shared secret"
-                  className="w-full text-sm"
-                />
+                {item.fields.map((field) => (
+                  <label key={field.key} className="block space-y-1">
+                    <span className="text-xs text-[var(--text-dim)]">{field.label}</span>
+                    <input
+                      data-testid={field.testId}
+                      type={field.secret ? "password" : "text"}
+                      value={values[`${item.kind}.${field.key}`] ?? ""}
+                      onChange={(e) =>
+                        setValues((current) => ({
+                          ...current,
+                          [`${item.kind}.${field.key}`]: e.target.value,
+                        }))
+                      }
+                      placeholder={field.placeholder}
+                      className="w-full text-sm"
+                    />
+                  </label>
+                ))}
                 <div className="flex gap-2">
                   <Button
-                    testId={item.kind === "CMS_WEBHOOK" ? "cms-save" : "notify-save"}
+                    testId={saveTestId(item.kind)}
                     variant="primary"
-                    onClick={() => saveConfig(item.kind)}
+                    onClick={() => saveFields(item)}
                     disabled={busy}
                   >
                     Save
@@ -226,4 +372,10 @@ export function IntegrationsView({
       <Toast message={toast} testId="integrations-toast" />
     </div>
   );
+}
+
+function saveTestId(kind: string): string {
+  if (kind === "CMS_WEBHOOK") return "cms-save";
+  if (kind === "SLACK_WEBHOOK") return "notify-save";
+  return `save-${kind}`;
 }

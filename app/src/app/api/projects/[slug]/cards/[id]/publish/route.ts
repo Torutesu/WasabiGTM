@@ -2,7 +2,14 @@ import { db } from "@/lib/db";
 import { BadRequestError, NotFoundError, errorResponse, projectBySlug } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { NextResponse } from "next/server";
-import { IntegrationError, openPullRequest, postToX, publishToCms, slugify } from "@/lib/external";
+import {
+  IntegrationError,
+  integrationConfig,
+  openPullRequest,
+  postToX,
+  publishToCms,
+  slugify,
+} from "@/lib/external";
 import {
   CardStatus,
   IntegrationKind,
@@ -34,13 +41,10 @@ export async function POST(
     if (!draft) throw new BadRequestError("Card has no draft to publish");
 
     const method = (body.method ?? defaultMethod(card.channel)) as PublishMethod;
-    const integrations = await db.integration.findMany({ where: { projectId: project.id } });
-    const configFor = (kind: IntegrationKind) => {
-      const found = integrations.find((i) => i.kind === kind);
-      if (!found || found.status === "DISCONNECTED") return null;
-      const config = (found.config ?? {}) as Record<string, unknown>;
-      return { ...config, expired: found.status === "ERROR" };
-    };
+    // ERROR integrations are still handed over so the attempt returns
+    // "token expired" instead of the indistinguishable "not connected".
+    const configFor = (kind: IntegrationKind) =>
+      integrationConfig(project.id, kind, { allowError: true });
 
     // utm_campaign is the card id, so metrics attribute back to the exact card.
     const utm = `utm_source=wasabi&utm_medium=${card.channel.toLowerCase()}&utm_campaign=${card.id}`;
@@ -49,13 +53,19 @@ export async function POST(
 
     switch (method) {
       case PublishMethod.API_X: {
-        const result = await postToX(configFor(IntegrationKind.X_OAUTH), draft.content);
+        const result = await postToX({
+          projectId: project.id,
+          config: await configFor(IntegrationKind.X_OAUTH),
+          body: draft.content,
+        });
         externalUrl = result.url;
         break;
       }
       case PublishMethod.GITHUB_PR: {
         const meta = (draft.meta ?? {}) as Record<string, unknown>;
-        const result = await openPullRequest(configFor(IntegrationKind.GITHUB_APP), {
+        const result = await openPullRequest({
+          projectId: project.id,
+          config: await configFor(IntegrationKind.GITHUB_APP),
           title: card.title,
           body: `${card.rationale ?? ""}\n\n${draft.content}`,
           path: String(meta.filePath ?? "public/llms.txt"),
@@ -66,7 +76,7 @@ export async function POST(
       }
       case PublishMethod.CMS: {
         const meta = (draft.meta ?? {}) as Record<string, unknown>;
-        const result = await publishToCms(configFor(IntegrationKind.CMS_WEBHOOK), {
+        const result = await publishToCms(await configFor(IntegrationKind.CMS_WEBHOOK), {
           title: card.title,
           body: appendUtm(draft.content, project.url, utm),
           slug: slugify(card.title),
