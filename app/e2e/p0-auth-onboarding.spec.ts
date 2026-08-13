@@ -54,6 +54,8 @@ test("E2E-002 onboarding analyses the site and generates all five foundation doc
   expect(productInfo).toContain("Shogun Test");
   expect(productInfo).toContain("$62");
 
+  // The Living Context sources live behind the Sources tab on the same screen.
+  await page.getByTestId("docs-tab-sources").click();
   await expect(page.getByTestId("source-row-WEBSITE")).toContainText(MOCK_SITE_URL);
 });
 

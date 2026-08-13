@@ -6,7 +6,7 @@ export const CREDENTIALS = {
 };
 
 /** The mock product site the crawler reads during onboarding (served by the app in test mode). */
-export const MOCK_SITE_URL = "/__mock/site";
+export const MOCK_SITE_URL = "/testing/mock-site";
 
 export async function login(page: Page): Promise<void> {
   await page.goto("/login");
@@ -29,6 +29,9 @@ export async function createProject(
 
   await page.goto("/projects/new");
   await page.getByTestId("onboarding-url").fill(new URL(MOCK_SITE_URL, page.url()).toString());
+  // Blur the URL field first so its auto-fill of the name runs before we type,
+  // rather than racing with it.
+  await page.getByTestId("onboarding-url").blur();
   await page.getByTestId("onboarding-name").fill(name);
   await page.getByTestId(`onboarding-phase-${phase}`).check();
 

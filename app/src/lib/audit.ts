@@ -118,6 +118,9 @@ export async function runSeoAudit(input: {
       );
     }
 
+    // Site files. llms.txt lives here per AIF-005 rather than under GEO, so a
+    // single fix card covers it; the GEO screen reads this result for its
+    // AI-readiness checklist.
     const robots = await safeFetch(new URL("/robots.txt", input.url).toString());
     if (!robots) {
       findings.push(issue("LOW", input.url, "robots.txt not found", "Crawlers get no guidance.", "Add a robots.txt that allows crawling and points at the sitemap."));
@@ -125,6 +128,27 @@ export async function runSeoAudit(input: {
     const sitemap = await safeFetch(new URL("/sitemap.xml", input.url).toString());
     if (!sitemap) {
       findings.push(issue("MEDIUM", input.url, "sitemap.xml not found", "Search engines have to discover pages by crawling alone.", "Publish a sitemap.xml listing every indexable page."));
+    }
+    const llmsTxt = await safeFetch(new URL("/llms.txt", input.url).toString());
+    if (!llmsTxt) {
+      findings.push(
+        issue(
+          "HIGH",
+          input.url,
+          "llms.txt not found",
+          "AI search engines have no curated summary of this product, so they infer it from whatever they happen to crawl.",
+          "Publish /llms.txt describing the product, who it is for, and the canonical pages.",
+          "public/llms.txt",
+          [
+            `# ${input.productName}`,
+            ``,
+            `> ${input.productName} — see ${input.url}`,
+            ``,
+            `## Core pages`,
+            `- [Home](${input.url})`,
+          ].join("\n"),
+        ),
+      );
     }
   }
 
@@ -161,30 +185,10 @@ export async function runGeoAudit(input: {
   url: string;
   productName: string;
 }): Promise<{ score: number; issues: Issue[]; stale: boolean }> {
+  // GEO issues are about citations. Site-file gaps (llms.txt, robots, sitemap,
+  // schema) are raised by the SEO audit so each fix is a single card.
   const findings: Issue[] = [];
   let stale = false;
-
-  const llmsTxt = await safeFetch(new URL("/llms.txt", input.url).toString());
-  if (!llmsTxt) {
-    findings.push(
-      issue(
-        "HIGH",
-        input.url,
-        "llms.txt not found",
-        "AI search engines have no curated summary of what this product is, so they infer it from whatever they crawl.",
-        "Publish /llms.txt describing the product, who it is for, and the canonical pages.",
-        "public/llms.txt",
-        [
-          `# ${input.productName}`,
-          ``,
-          `> ${input.productName} — see ${input.url}`,
-          ``,
-          `## Core pages`,
-          `- [Home](${input.url})`,
-        ].join("\n"),
-      ),
-    );
-  }
 
   const prompts = [
     `best tool for ${input.productName.toLowerCase()} use case`,

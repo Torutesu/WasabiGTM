@@ -6,7 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "test:db:migrate": "dotenv -e .env.test -- prisma migrate deploy",
+    "test:db:reset": "dotenv -e .env.test -- tsx scripts/reset-test-db.ts",
+    "test:server": "dotenv -e .env.test -- sh -c 'next build && next start'",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
